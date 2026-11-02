@@ -1,0 +1,580 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>🚗 Cheap Rocket League — Edición Chromebook</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body {
+    width:100%; height:100%;
+    background:#05060d; color:#fff;
+    font-family:'Segoe UI','Arial',sans-serif;
+    overflow:hidden; user-select:none; touch-action:none;
+  }
+  #gameContainer { position:relative; width:100%; height:100%; display:flex; align-items:center; justify-content:center; }
+  canvas { display:block; background:#0a0e1a; max-width:100%; max-height:100%; }
+
+  #topHud {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    display:flex; align-items:center; gap:14px;
+    background:linear-gradient(180deg,rgba(10,14,26,0.95),rgba(10,14,26,0.7));
+    backdrop-filter:blur(10px);
+    border:2px solid rgba(74,158,255,0.3);
+    border-radius:14px; padding:6px 18px;
+    font-weight:800; z-index:10;
+    box-shadow:0 4px 30px rgba(0,0,0,0.6);
+  }
+  .score { font-size:clamp(22px,3.5vw,32px); text-shadow:0 0 20px currentColor; min-width:40px; text-align:center; transition:transform 0.15s; }
+  .score.pulse { transform:scale(1.5); }
+  #blueScore { color:#4a9eff; }
+  #orangeScore { color:#ff8a3d; }
+  #timer {
+    font-size:clamp(14px,2vw,20px);
+    background:rgba(255,255,255,0.08);
+    padding:4px 12px; border-radius:20px;
+    letter-spacing:2px; min-width:75px; text-align:center;
+    font-family:'Courier New',monospace;
+  }
+  #timer.overtime { background:rgba(255,200,0,0.3); color:#ffcc00; animation:pulseOvertime 0.8s infinite; }
+  @keyframes pulseOvertime {
+    0%,100% { box-shadow:0 0 0 rgba(255,200,0,0.5); }
+    50% { box-shadow:0 0 20px rgba(255,200,0,0.9); }
+  }
+  #overtimeLabel {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    font-size:11px; color:#ffcc00; letter-spacing:4px;
+    display:none; z-index:10; text-shadow:0 0 10px #ffcc00;
+  }
+  #overtimeLabel.show { display:block; animation:pulseOvertime 1s infinite; }
+
+  #message {
+    position:absolute; top:38%; left:50%;
+    transform:translate(-50%,-50%) scale(0.3);
+    font-size:clamp(36px,9vw,80px);
+    font-weight:900; letter-spacing:6px;
+    text-shadow:0 0 40px currentColor,0 0 80px currentColor;
+    pointer-events:none; opacity:0;
+    transition:opacity 0.3s,transform 0.3s cubic-bezier(0.34,1.56,0.64,1);
+    z-index:20; text-align:center; white-space:nowrap;
+  }
+  #message.show { opacity:1; transform:translate(-50%,-50%) scale(1); }
+  #subMessage {
+    position:absolute; top:52%; left:50%;
+    transform:translate(-50%,-50%);
+    font-size:clamp(14px,2.5vw,22px);
+    font-weight:600; letter-spacing:2px;
+    color:#ccc; text-shadow:0 0 10px rgba(0,0,0,0.8);
+    pointer-events:none; opacity:0;
+    transition:opacity 0.3s; z-index:20; text-align:center;
+  }
+  #subMessage.show { opacity:1; }
+
+  #chatBox {
+    position:absolute; bottom:80px; left:12px;
+    font-size:12px; color:#fff; z-index:15;
+    pointer-events:none; max-width:280px;
+  }
+  .chatMsg {
+    background:rgba(0,0,0,0.7);
+    padding:5px 10px; border-radius:10px;
+    margin-bottom:4px; display:inline-block;
+    animation:chatFade 3s forwards;
+    border-left:3px solid #4a9eff;
+    font-size:12px;
+  }
+  @keyframes chatFade {
+    0% { opacity:1; transform:translateX(-10px); }
+    10% { transform:translateX(0); }
+    90% { opacity:1; }
+    100% { opacity:0; }
+  }
+
+  #bottomHud {
+    position:absolute; bottom:8px; left:0; right:0;
+    display:flex; justify-content:space-between; align-items:flex-end;
+    padding:0 12px; z-index:8; pointer-events:none;
+  }
+  .boostContainer { display:flex; flex-direction:column; align-items:center; pointer-events:none; }
+  .boostRing {
+    width:clamp(50px,7vw,70px); height:clamp(50px,7vw,70px);
+    border-radius:50%; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    box-shadow:0 0 15px currentColor;
+  }
+  .boostRing::before { content:''; position:absolute; inset:6px; background:#0a0e1a; border-radius:50%; }
+  .boostNum {
+    position:relative; font-size:clamp(14px,2vw,20px);
+    font-weight:900; color:#fff; z-index:1;
+    text-shadow:0 0 8px currentColor;
+  }
+  .boostLabel { font-size:9px; letter-spacing:2px; color:#888; margin-top:3px; font-weight:bold; }
+
+  #minimap {
+    position:absolute; top:10px; right:10px;
+    width:140px; height:80px; z-index:10;
+    background:rgba(10,14,26,0.8);
+    border:1.5px solid rgba(74,158,255,0.4);
+    border-radius:8px; overflow:hidden;
+  }
+
+  #commentator {
+    position:absolute; top:70px; left:12px;
+    max-width:280px;
+    font-size:12px; color:#ffd54f;
+    font-style:italic; z-index:15;
+    pointer-events:none; opacity:0;
+    transition:opacity 0.4s;
+    text-shadow:0 0 10px rgba(0,0,0,0.9);
+    padding:6px 10px;
+    background:rgba(0,0,0,0.6);
+    border-radius:8px;
+    border-left:3px solid #ffd54f;
+  }
+  #commentator.show { opacity:1; }
+
+  #mainMenu {
+    position:absolute; inset:0;
+    display:flex; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    background:radial-gradient(circle at 50% 20%,rgba(74,158,255,0.15),rgba(5,6,13,0.98));
+    z-index:100; gap:14px;
+    padding:20px; padding-top:30px;
+    overflow-y:auto;
+  }
+  #mainMenu.hidden { display:none; }
+  #mainMenu h1 {
+    font-size:clamp(28px,6vw,58px);
+    font-weight:900; text-align:center;
+    background:linear-gradient(135deg,#4a9eff,#ff8a3d);
+    -webkit-background-clip:text; background-clip:text;
+    -webkit-text-fill-color:transparent;
+    filter:drop-shadow(0 0 30px rgba(74,158,255,0.5));
+    letter-spacing:2px; line-height:1.1;
+  }
+  #mainMenu .subtitle {
+    color:#888; font-size:clamp(10px,1.5vw,14px);
+    letter-spacing:4px; text-transform:uppercase;
+    margin-top:-8px; margin-bottom:8px;
+  }
+  .menuSection {
+    width:100%; max-width:520px;
+    display:flex; flex-direction:column; gap:8px;
+    background:rgba(0,0,0,0.4);
+    padding:12px 16px;
+    border-radius:12px;
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  .menuSection h3 {
+    font-size:12px; letter-spacing:3px;
+    color:#4a9eff; text-transform:uppercase;
+    margin-bottom:4px;
+  }
+  .menuBtnRow { display:flex; flex-wrap:wrap; gap:6px; }
+  .menuBtn {
+    padding:10px 20px;
+    font-size:clamp(11px,1.5vw,13px);
+    font-weight:700;
+    background:linear-gradient(135deg,#1e3a5f,#0d1b2a);
+    color:#fff;
+    border:1.5px solid #4a9eff;
+    border-radius:8px;
+    cursor:pointer;
+    transition:all 0.15s;
+    letter-spacing:1.5px;
+    text-transform:uppercase;
+    flex:1; min-width:120px;
+  }
+  .menuBtn:hover,.menuBtn:active {
+    background:linear-gradient(135deg,#4a9eff,#2a6dd4);
+    transform:translateY(-1px);
+    box-shadow:0 6px 20px rgba(74,158,255,0.5);
+  }
+  .menuBtn.primary {
+    background:linear-gradient(135deg,#4a9eff,#2a6dd4);
+    border-color:#4a9eff;
+    font-size:clamp(13px,2vw,16px);
+    padding:14px 24px;
+    min-width:100%;
+  }
+  .menuBtn.primary:hover,.menuBtn.primary:active {
+    background:linear-gradient(135deg,#5aaeff,#3a7dd4);
+    box-shadow:0 8px 30px rgba(74,158,255,0.7);
+  }
+  .menuBtn.selected {
+    background:linear-gradient(135deg,#4a9eff,#2a6dd4);
+    box-shadow:0 0 15px rgba(74,158,255,0.6);
+  }
+  .menuBtn.danger {
+    border-color:#ff5555;
+    background:linear-gradient(135deg,#5f1e1e,#2a0d0d);
+  }
+
+  .carGrid { display:grid; grid-template-columns:repeat(auto-fill, minmax(70px,1fr)); gap:6px; }
+  .carChoice {
+    background:rgba(255,255,255,0.05);
+    border:2px solid rgba(255,255,255,0.1);
+    border-radius:8px;
+    padding:6px 4px;
+    text-align:center;
+    cursor:pointer;
+    transition:all 0.15s;
+    font-size:9px;
+    font-weight:bold;
+  }
+  .carChoice:hover { border-color:#4a9eff; }
+  .carChoice.selected {
+    border-color:#4a9eff;
+    background:rgba(74,158,255,0.2);
+    box-shadow:0 0 12px rgba(74,158,255,0.5);
+  }
+  .carChoice canvas { display:block; margin:0 auto 3px; }
+
+  .colorRow { display:flex; gap:6px; flex-wrap:wrap; }
+  .colorSwatch {
+    width:26px; height:26px; border-radius:50%;
+    cursor:pointer; border:2px solid rgba(255,255,255,0.2);
+    transition:transform 0.15s;
+  }
+  .colorSwatch:hover { transform:scale(1.15); }
+  .colorSwatch.selected { border-color:#fff; transform:scale(1.15); box-shadow:0 0 10px currentColor; }
+
+  .settingsGrid {
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px 14px;
+    font-size:12px;
+  }
+  .settingsGrid label { display:flex; align-items:center; gap:6px; cursor:pointer; }
+  .settingsGrid input[type="checkbox"] { width:16px; height:16px; accent-color:#4a9eff; cursor:pointer; }
+  .settingsGrid input[type="range"] { flex:1; accent-color:#4a9eff; cursor:pointer; min-width:50px; }
+  .settingsGrid .full { grid-column:1/-1; }
+  .settingsGrid input[type="text"] {
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.15);
+    border-radius:6px; color:#fff;
+    padding:4px 8px; font-size:11px;
+    width:100%;
+  }
+
+  #controlsInfo {
+    font-size:10px; color:#666; text-align:center;
+    line-height:1.6; padding:8px;
+    max-width:600px;
+  }
+  kbd {
+    background:#2a2a4a; padding:1px 5px;
+    border-radius:3px; color:#fff;
+    font-family:monospace; font-size:9px;
+    margin:0 1px;
+    border:1px solid rgba(255,255,255,0.15);
+    display:inline-block;
+    min-width:16px;
+    text-align:center;
+  }
+
+  #pauseOverlay {
+    position:absolute; inset:0;
+    background:rgba(5,6,13,0.9);
+    backdrop-filter:blur(8px);
+    display:none; flex-direction:column;
+    align-items:center; justify-content:center;
+    z-index:50; gap:16px;
+  }
+  #pauseOverlay.show { display:flex; }
+  #pauseOverlay h2 { font-size:48px; letter-spacing:6px; color:#4a9eff; text-shadow:0 0 20px #4a9eff; }
+
+  #endScreen {
+    position:absolute; inset:0;
+    background:rgba(5,6,13,0.96);
+    backdrop-filter:blur(10px);
+    display:none; flex-direction:column;
+    align-items:center; justify-content:flex-start;
+    z-index:60; gap:14px;
+    padding:20px; overflow-y:auto;
+  }
+  #endScreen.show { display:flex; }
+  #endTitle {
+    font-size:clamp(28px,6vw,54px);
+    font-weight:900; text-align:center;
+    text-shadow:0 0 30px currentColor;
+    letter-spacing:3px;
+  }
+  #mvpCard {
+    background:linear-gradient(135deg,rgba(255,215,0,0.15),rgba(255,215,0,0.05));
+    border:2px solid #ffd700;
+    border-radius:12px;
+    padding:12px 24px;
+    text-align:center;
+    box-shadow:0 0 30px rgba(255,215,0,0.3);
+  }
+  #mvpCard .label { font-size:10px; letter-spacing:4px; color:#ffd700; margin-bottom:4px; }
+  #mvpCard .name { font-size:20px; font-weight:900; }
+  #endStats {
+    background:rgba(255,255,255,0.05);
+    border:1px solid rgba(255,255,255,0.1);
+    border-radius:12px;
+    padding:14px 20px;
+    font-size:12px;
+    line-height:1.8;
+    min-width:280px; max-width:500px; width:100%;
+  }
+  #endStats .row { display:flex; justify-content:space-between; gap:14px; padding:3px 0; }
+  #endStats .row.blue { color:#4a9eff; }
+  #endStats .row.orange { color:#ff8a3d; }
+  #endStats .row.highlight {
+    border-top:1px solid rgba(255,255,255,0.1);
+    padding-top:8px; margin-top:6px;
+    font-weight:900;
+  }
+  #endStats .header {
+    display:flex; justify-content:space-between;
+    gap:14px; padding:4px 0;
+    border-bottom:1px solid rgba(255,255,255,0.2);
+    margin-bottom:6px; font-weight:900;
+    font-size:11px; color:#aaa;
+  }
+
+  #touchControls { position:absolute; inset:0; pointer-events:none; z-index:30; display:none; }
+  #touchControls.active { display:block; }
+  .touchBtn {
+    position:absolute;
+    background:rgba(74,158,255,0.25);
+    border:2px solid rgba(74,158,255,0.6);
+    border-radius:50%;
+    pointer-events:auto;
+    display:flex; align-items:center; justify-content:center;
+    font-size:20px; font-weight:bold; color:#fff;
+    backdrop-filter:blur(6px);
+  }
+  #tLeft { left:15px; bottom:100px; width:56px; height:56px; }
+  #tRight { left:85px; bottom:100px; width:56px; height:56px; }
+  #tJump { left:50px; bottom:30px; width:56px; height:56px; }
+  #tBoost { right:15px; bottom:50px; width:76px; height:76px; background:rgba(255,200,0,0.3); border-color:rgba(255,200,0,0.7); }
+  #tSlide { right:110px; bottom:30px; width:56px; height:56px; background:rgba(200,50,255,0.3); border-color:rgba(200,50,255,0.7); }
+
+  #tournamentHud {
+    position:absolute; top:70px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.7);
+    padding:4px 14px; border-radius:20px;
+    font-size:11px; color:#ffd700;
+    letter-spacing:2px; z-index:10;
+    display:none;
+  }
+  #tournamentHud.show { display:block; }
+
+  #toast {
+    position:absolute; top:80px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,0.85);
+    padding:8px 20px; border-radius:20px;
+    font-size:13px; color:#fff; font-weight:600;
+    opacity:0; transition:opacity 0.3s;
+    z-index:25; pointer-events:none;
+    border:1px solid rgba(74,158,255,0.4);
+  }
+  #toast.show { opacity:1; }
+
+  /* === Panel de controles Chromebook === */
+  .controlsGrid {
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:10px;
+    font-size:11px;
+  }
+  .controlsGrid > div {
+    background:rgba(255,255,255,0.03);
+    padding:10px 12px;
+    border-radius:8px;
+    border:1px solid rgba(255,255,255,0.08);
+  }
+  .controlsGrid h4 {
+    font-size:11px;
+    letter-spacing:2px;
+    margin-bottom:6px;
+    text-transform:uppercase;
+  }
+  .controlRow {
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    padding:3px 0;
+    border-bottom:1px solid rgba(255,255,255,0.04);
+  }
+  .controlRow:last-child { border-bottom:none; }
+  .controlRow .keys {
+    display:flex;
+    gap:3px;
+    flex-wrap:wrap;
+    justify-content:flex-end;
+  }
+  .keyBadge {
+    background:linear-gradient(180deg,#2a2a4a,#1a1a2a);
+    border:1px solid #4a4a6a;
+    border-bottom-width:2px;
+    border-radius:4px;
+    padding:2px 6px;
+    font-family:monospace;
+    font-size:10px;
+    color:#fff;
+    min-width:16px;
+    text-align:center;
+    box-shadow:0 1px 2px rgba(0,0,0,0.5);
+  }
+  .keyBadge.alt {
+    background:linear-gradient(180deg,#2a1a3a,#1a0a2a);
+    border-color:#6a3a8a;
+  }
+  .altLabel {
+    font-size:8px;
+    color:#888;
+    letter-spacing:1px;
+    text-align:center;
+    margin-top:4px;
+    font-style:italic;
+  }
+  @media (max-width:700px) {
+    .controlsGrid { grid-template-columns: 1fr; }
+  }
+  @media (max-width:600px) {
+    .menuSection { padding:10px 12px; }
+    .menuBtn { padding:8px 12px; font-size:10px; min-width:100px; }
+    #minimap { width:100px; height:60px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <canvas id="game" width="1280" height="720"></canvas>
+
+  <div id="topHud">
+    <span id="blueScore" class="score">0</span>
+    <span id="timer">2:00</span>
+    <span id="orangeScore" class="score">0</span>
+  </div>
+  <div id="overtimeLabel">★ TIEMPO EXTRA ★</div>
+  <div id="tournamentHud"></div>
+
+  <div id="message"></div>
+  <div id="subMessage"></div>
+  <div id="toast"></div>
+  <div id="commentator"></div>
+
+  <div id="chatBox"></div>
+
+  <canvas id="minimap" width="140" height="80"></canvas>
+
+  <div id="bottomHud">
+    <div class="boostContainer">
+      <div class="boostRing" id="blueBoostRing" style="color:#4a9eff">
+        <span class="boostNum" id="blueBoostNum">33</span>
+      </div>
+      <div class="boostLabel">AZUL</div>
+    </div>
+    <div class="boostContainer">
+      <div class="boostRing" id="orangeBoostRing" style="color:#ff8a3d">
+        <span class="boostNum" id="orangeBoostNum">33</span>
+      </div>
+      <div class="boostLabel">NARANJA</div>
+    </div>
+  </div>
+
+  <div id="controlsInfo" style="position:absolute;bottom:0;left:50%;transform:translateX(-50%);z-index:5;background:rgba(0,0,0,0.6);border-radius:12px 12px 0 0;padding:4px 14px">
+    <strong style="color:#4a9eff">Azul:</strong> <kbd>A</kbd><kbd>D</kbd> · <kbd>W</kbd> o <kbd>Espacio</kbd> saltar ×2 · <kbd>Shift</kbd> boost · <kbd>X</kbd> drift &nbsp;|&nbsp;
+    <strong style="color:#ff8a3d">Naranja:</strong> <kbd>←</kbd><kbd>→</kbd> · <kbd>↑</kbd> o <kbd>Enter</kbd> · <kbd>Enter</kbd>/<kbd>.</kbd> boost · <kbd>,</kbd> drift &nbsp;|&nbsp;
+    <kbd>P</kbd>/<kbd>Esc</kbd> pausa · <kbd>C</kbd> ball cam
+  </div>
+
+  <div id="touchControls">
+    <div class="touchBtn" id="tLeft">◀</div>
+    <div class="touchBtn" id="tRight">▶</div>
+    <div class="touchBtn" id="tJump">⤒</div>
+    <div class="touchBtn" id="tBoost">⚡</div>
+    <div class="touchBtn" id="tSlide">◎</div>
+  </div>
+
+  <div id="pauseOverlay">
+    <h2>PAUSA</h2>
+    <button class="menuBtn primary" onclick="togglePause()">▶ Continuar</button>
+    <button class="menuBtn danger" onclick="exitToMenu()">✕ Menú principal</button>
+  </div>
+
+  <div id="endScreen">
+    <h2 id="endTitle">¡FIN!</h2>
+    <div id="mvpCard" style="display:none">
+      <div class="label">★ MVP ★</div>
+      <div class="name" id="mvpName">-</div>
+    </div>
+    <div id="endStats"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
+      <button class="menuBtn primary" onclick="rematch()" style="min-width:150px">🔄 Revancha</button>
+      <button class="menuBtn" onclick="exitToMenu()" style="min-width:150px">🏠 Menú</button>
+    </div>
+  </div>
+
+  <div id="mainMenu">
+    <h1>🚗 CHEAP ROCKET LEAGUE</h1>
+    <div class="subtitle">Edición Chromebook · Casi como el original</div>
+
+    <div class="menuSection">
+      <h3>🎮 Modo de juego</h3>
+      <div class="menuBtnRow">
+        <button class="menuBtn selected" data-mode="1v1ai">1v1 vs IA</button>
+        <button class="menuBtn" data-mode="2v2ai">2v2 vs IA</button>
+        <button class="menuBtn" data-mode="2v2local">2v2 Local</button>
+        <button class="menuBtn" data-mode="training">Entrenamiento</button>
+        <button class="menuBtn" data-mode="tournament">Torneo</button>
+        <button class="menuBtn" data-mode="mutator">Low Gravity</button>
+      </div>
+    </div>
+
+    <div class="menuSection">
+      <h3>🏟️ Estadio</h3>
+      <div class="menuBtnRow">
+        <button class="menuBtn selected" data-stadium="manfield">Manfield</button>
+        <button class="menuBtn" data-stadium="dfh">DFH Night</button>
+        <button class="menuBtn" data-stadium="neon">Neon</button>
+        <button class="menuBtn" data-stadium="ice">Ice</button>
+        <button class="menuBtn" data-stadium="space">Space</button>
+      </div>
+    </div>
+
+    <div class="menuSection">
+      <h3>🎚️ Dificultad IA</h3>
+      <div class="menuBtnRow">
+        <button class="menuBtn" data-diff="easy">Fácil</button>
+        <button class="menuBtn selected" data-diff="normal">Normal</button>
+        <button class="menuBtn" data-diff="hard">Difícil</button>
+        <button class="menuBtn" data-diff="pro">Pro</button>
+      </div>
+    </div>
+
+    <div class="menuSection">
+      <h3>🚗 Tu coche (Azul)</h3>
+      <div class="carGrid" id="carGrid"></div>
+      <div style="margin-top:8px">
+        <div style="font-size:10px;color:#888;margin-bottom:4px;letter-spacing:2px">COLOR PRIMARIO</div>
+        <div class="colorRow" id="primaryColors"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div style="font-size:10px;color:#888;margin-bottom:4px;letter-spacing:2px">COLOR SECUNDARIO</div>
+        <div class="colorRow" id="secondaryColors"></div>
+      </div>
+      <div style="margin-top:8px">
+        <div style="font-size:10px;color:#888;margin-bottom:4px;letter-spacing:2px">TOPPER</div>
+        <div class="menuBtnRow" id="topperRow"></div>
+      </div>
+    </div>
+
+    <!-- === CONTROLES CHROMEBOOK === -->
+    <div class="menuSection">
+      <h3>⌨️ Controles (compatibles Chromebook)</h3>
+      <div class="controlsGrid">
+        <div>
+          <h4 style="color:#4a9eff">🔵 Jugador Azul (J1)</h4>
+          <div class="controlRow">
+            <span>Mover izq.</span>
+            <span class="keys"><span class="keyBadge">A</span></span>
+          </div>
+          <div class="controlRow">
+  
